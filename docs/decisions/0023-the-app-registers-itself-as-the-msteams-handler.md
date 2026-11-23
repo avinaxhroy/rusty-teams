@@ -38,7 +38,12 @@ join (no direct-join command exists anymore).
 
 ## Consequences
 
-- The external helper is deleted; the README no longer mentions it.
+- The helper era ends: the app catches the links itself. (The "Teams on the web"
+  call fallback — the helper `--join` used to go through — was already removed in
+  `chore(calls): remove the Teams on the web call path`; this closes the last gap,
+  the OS never launching us at all.)
 - Registration is best-effort: a failure logs and the app starts anyway.
 - On Linux, flatpak's sandbox needs no extra manifest key: the desktop file's
   `MimeType` inside the flatpak already exposes the handler to the host portal.
+- The shadow call webview keeps cancelling its own `msteams:` launches
+  (`block_app_launch`): a hidden WebView2 must not hand a running call back to the OS.
