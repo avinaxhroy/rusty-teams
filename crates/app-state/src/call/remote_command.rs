@@ -2,7 +2,6 @@ use calling::{CallCommand, DeviceChoice, MuteCommand, ShareKind};
 use gpui_kit::*;
 use serde_json::json;
 
-use super::join::JoinMode;
 use crate::app_state::AppState;
 
 pub const JOIN_FLAG: &str = "--join";
@@ -93,11 +92,11 @@ impl RemoteCommand {
 }
 
 impl AppState {
-    /// Commands a second `teams` process forwards, used by the call end-to-end test.
+    /// Commands a second `teams` process forwards; a forwarded join opens the pre-join screen like any other join.
     pub fn run_remote_command(&mut self, text: &str, cx: &mut Context<Self>) {
         match RemoteCommand::decode(text) {
             Some(RemoteCommand::Join(link)) => {
-                self.join_link(&link, JoinMode::Direct, cx);
+                self.join_link(&link, cx);
             }
             Some(RemoteCommand::HangUp) => self.leave_call(cx),
             Some(RemoteCommand::AdmitAll) => self.admit_all_call_guests(cx),
@@ -193,6 +192,13 @@ impl AppState {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+
+    use gpui_kit::{AppContext as _, TestAppContext};
+    use store::Store;
+
+    use crate::app_state::{AppState, Mode};
+
     use super::RemoteCommand;
 
     #[test]
@@ -218,5 +224,24 @@ mod tests {
         }
         assert_eq!(RemoteCommand::decode("join  "), None);
         assert_eq!(RemoteCommand::decode("reboot"), None);
+    }
+
+    #[gpui_kit::test]
+    fn a_remote_join_stages_the_prejoin_instead_of_starting_the_call(cx: &mut TestAppContext) {
+        cx.update(gpui_kit::init);
+        let store = Arc::new(Store::open_in_memory().unwrap());
+        let mode = Mode {
+            demo: true,
+            ..Mode::default()
+        };
+        let app = cx.update(|cx| cx.new(|_| AppState::new(store, mode)));
+        let link = "https://teams.microsoft.com/l/meetup-join/19%3ameeting_ZDk5%40thread.v2/0?context=%7b%22Tid%22%3a%22tenant-1%22%2c%22Oid%22%3a%22organizer-1%22%7d";
+        app.update(cx, |state, cx| {
+            state.run_remote_command(&format!("join {link}"), cx)
+        });
+        app.read_with(cx, |state, _| {
+            assert!(state.prejoin.is_some());
+            assert!(state.call.is_none());
+        });
     }
 }

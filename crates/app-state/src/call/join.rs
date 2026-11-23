@@ -28,19 +28,8 @@ pub fn meeting_target(meeting: &ThreadMeeting) -> MeetingTarget {
     }
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub(crate) enum JoinMode {
-    Prejoin,
-    Direct,
-}
-
 impl AppState {
-    fn join_resolved_meeting(
-        &mut self,
-        target: MeetingTarget,
-        mode: JoinMode,
-        cx: &mut Context<Self>,
-    ) {
+    fn join_resolved_meeting(&mut self, target: MeetingTarget, cx: &mut Context<Self>) {
         if self.call.is_some() {
             self.show_call(true, cx);
             return;
@@ -64,16 +53,10 @@ impl AppState {
                 organizer: false,
             },
         };
-        match mode {
-            JoinMode::Prejoin => self.stage_meeting_join(join, cx),
-            JoinMode::Direct => {
-                let options = self.join_options.clone();
-                self.start_meeting(join, Some(&options), cx)
-            }
-        }
+        self.stage_meeting_join(join, cx);
     }
 
-    fn join_meeting_code(&mut self, code: MeetingCode, mode: JoinMode, cx: &mut Context<Self>) {
+    fn join_meeting_code(&mut self, code: MeetingCode, cx: &mut Context<Self>) {
         if self.call.is_some() {
             self.show_call(true, cx);
             return;
@@ -86,7 +69,7 @@ impl AppState {
                 organizer_id: "demo-organizer".to_owned(),
                 meeting_data: Some(meeting_data),
             };
-            self.join_resolved_meeting(target, mode, cx);
+            self.join_resolved_meeting(target, cx);
             return;
         }
         let Some(launcher) = self.call_launcher.clone() else {
@@ -97,7 +80,7 @@ impl AppState {
         cx.spawn(async move |this, cx| {
             let resolved = receiver.await.ok().unwrap_or_else(|| Err(String::new()));
             this.update(cx, |state, cx| match resolved {
-                Ok(target) => state.join_resolved_meeting(target, mode, cx),
+                Ok(target) => state.join_resolved_meeting(target, cx),
                 Err(message) if message == NOT_READY => state.raise_notice(message, None, cx),
                 Err(_) => state.raise_notice(NOT_FOUND_NOTICE.to_owned(), None, cx),
             })
@@ -121,7 +104,7 @@ impl AppState {
         cx.spawn(async move |this, cx| {
             let url = receiver.await.ok().and_then(Result::ok).flatten();
             this.update(cx, |state, cx| match url {
-                Some(url) => state.join_link(&url, JoinMode::Prejoin, cx),
+                Some(url) => state.join_link(&url, cx),
                 None => state.raise_notice(MEETING_UNAVAILABLE_NOTICE.to_owned(), None, cx),
             })
             .ok();
@@ -130,15 +113,15 @@ impl AppState {
     }
 
     pub fn join_meeting_link(&mut self, text: &str, cx: &mut Context<Self>) {
-        self.join_link(text, JoinMode::Prejoin, cx);
+        self.join_link(text, cx);
     }
 
-    pub(crate) fn join_link(&mut self, text: &str, mode: JoinMode, cx: &mut Context<Self>) {
+    pub(crate) fn join_link(&mut self, text: &str, cx: &mut Context<Self>) {
         match parse_meeting_link(text) {
             Some(MeetingLink::Thread(meeting)) => {
-                self.join_resolved_meeting(meeting_target(&meeting), mode, cx)
+                self.join_resolved_meeting(meeting_target(&meeting), cx)
             }
-            Some(MeetingLink::Code(code)) => self.join_meeting_code(code, mode, cx),
+            Some(MeetingLink::Code(code)) => self.join_meeting_code(code, cx),
             None => self.raise_notice(MEETING_UNAVAILABLE_NOTICE.to_owned(), None, cx),
         }
     }
@@ -158,7 +141,7 @@ impl AppState {
                 organizer_id: "demo-organizer".to_owned(),
                 meeting_data: None,
             };
-            self.join_resolved_meeting(target, JoinMode::Prejoin, cx);
+            self.join_resolved_meeting(target, cx);
             return;
         }
         let Some(launcher) = self.call_launcher.clone() else {
@@ -174,7 +157,7 @@ impl AppState {
             this.update(cx, |state, cx| {
                 state.meet_now_pending = false;
                 match created {
-                    Some(url) => state.join_link(&url, JoinMode::Prejoin, cx),
+                    Some(url) => state.join_link(&url, cx),
                     None => state.raise_notice(MEET_NOW_FAILED_NOTICE.to_owned(), None, cx),
                 }
                 cx.notify();
@@ -196,7 +179,7 @@ impl AppState {
         }
         let code =
             meeting_code_from_id(meeting_id, passcode).ok_or_else(|| BAD_ID_MESSAGE.to_owned())?;
-        self.join_meeting_code(code, JoinMode::Prejoin, cx);
+        self.join_meeting_code(code, cx);
         Ok(())
     }
 }
