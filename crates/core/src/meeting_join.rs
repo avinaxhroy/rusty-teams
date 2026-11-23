@@ -179,6 +179,43 @@ mod tests {
     }
 
     #[test]
+    fn an_msteams_meetup_join_link_parses_like_its_https_twin() {
+        let msteams = JOIN_LINK.replace("https://", "msteams://");
+        let meeting = thread(parse_meeting_link(&msteams));
+        assert_eq!(meeting.thread_id, THREAD);
+        assert_eq!(meeting.tenant_id, "tenant-1");
+        assert_eq!(meeting.organizer_id, "organizer-1");
+        assert_eq!(meeting, thread(parse_meeting_link(JOIN_LINK)));
+    }
+
+    #[test]
+    fn an_msteams_meet_link_parses_to_the_code_with_passcode() {
+        let link = parse_meeting_link("msteams://teams.microsoft.com/meet/123456789012?p=AbC12xyz");
+        let Some(MeetingLink::Code(code)) = link else {
+            panic!("not a code link");
+        };
+        assert_eq!(code.code, "123456789012");
+        assert_eq!(code.passcode.as_deref(), Some("AbC12xyz"));
+    }
+
+    #[test]
+    fn an_msteams_link_on_a_foreign_host_is_no_meeting_link() {
+        assert_eq!(parse_meeting_link("msteams://example.com/x"), None);
+        assert_eq!(parse_meeting_link("msteams://example.com/meet/123456789012"), None);
+    }
+
+    #[test]
+    fn an_uppercase_msteams_scheme_and_mixed_case_host_still_parse() {
+        let msteams = JOIN_LINK
+            .replace("https://", "MSTEAMS://")
+            .replace("teams.microsoft.com", "Teams.Microsoft.com");
+        let meeting = thread(parse_meeting_link(&msteams));
+        assert_eq!(meeting.thread_id, THREAD);
+        assert_eq!(meeting.tenant_id, "tenant-1");
+        assert_eq!(meeting.organizer_id, "organizer-1");
+    }
+
+    #[test]
     fn a_meetup_join_link_on_the_new_host_parses_too() {
         let link = JOIN_LINK.replace("teams.microsoft.com", "teams.cloud.microsoft");
         assert_eq!(thread(parse_meeting_link(&link)).thread_id, THREAD);

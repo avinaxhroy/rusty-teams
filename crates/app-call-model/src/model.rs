@@ -1474,6 +1474,114 @@ mod tests {
         assert!(!model.can_unmute());
     }
 
+    fn published(state_id: &str) -> calling::PublishedState {
+        calling::PublishedState {
+            state_id: state_id.into(),
+            rank: 1,
+        }
+    }
+
+    fn attendee(mri: &str) -> RosterEntry {
+        RosterEntry {
+            role: Some(MeetingRole::Attendee),
+            ..entry(mri, "Me", false, false)
+        }
+    }
+
+    fn restricted_meeting() -> CallModel {
+        let mut model = meeting_with_me();
+        model.apply(CallUpdate::State(CallState::Connected {
+            since: Instant::now(),
+        }));
+        model.apply(CallUpdate::Cameras(vec![CameraDevice {
+            key: "cam-1".into(),
+            name: "FaceTime HD".into(),
+        }]));
+        model
+    }
+
+    #[test]
+    fn an_own_mic_blocked_state_disables_unmuting_but_not_the_camera() {
+        let mut model = restricted_meeting();
+        let mut muted_by_host = attendee("8:orgid:me");
+        muted_by_host.limits = AttendeeLimits {
+            mic_blocked: Some(published("audio-1")),
+            ..Default::default()
+        };
+        model.apply(CallUpdate::Roster(vec![muted_by_host]));
+        assert!(!model.can_unmute());
+        assert!(model.can_use_camera());
+    }
+
+    #[test]
+    fn the_meeting_wide_restrictions_stop_at_an_organizer() {
+        let mut model = restricted_meeting();
+        model.apply(CallUpdate::Roster(vec![attendee("8:orgid:me")]));
+        model.apply(CallUpdate::Capability(MeetingCapability {
+            attendee_mic_off: true,
+            attendee_camera_off: true,
+            ..Default::default()
+        }));
+        assert!(!model.can_unmute());
+        assert!(!model.can_use_camera());
+        model.apply(CallUpdate::Roster(vec![RosterEntry {
+            organizer: true,
+            role: Some(MeetingRole::Organizer),
+            ..entry("8:orgid:me", "Me", false, false)
+        }]));
+        assert!(model.can_unmute());
+        assert!(model.can_use_camera());
+    }
+
+    #[test]
+    fn the_meeting_wide_mic_off_blocks_an_attendee_until_released() {
+        let mut model = restricted_meeting();
+        model.apply(CallUpdate::Roster(vec![attendee("8:orgid:me")]));
+        assert!(model.can_unmute());
+        model.apply(CallUpdate::Capability(MeetingCapability {
+            attendee_mic_off: true,
+            ..Default::default()
+        }));
+        assert!(!model.can_unmute());
+        let mut released = attendee("8:orgid:me");
+        released.limits = AttendeeLimits {
+            mic_released: Some(published("release-1")),
+            ..Default::default()
+        };
+        model.apply(CallUpdate::Roster(vec![released]));
+        assert!(model.can_unmute());
+    }
+
+    #[test]
+    fn an_own_camera_blocked_state_disables_the_camera_despite_cameras() {
+        let mut model = restricted_meeting();
+        assert!(model.can_use_camera());
+        let mut video_blocked = attendee("8:orgid:me");
+        video_blocked.limits = AttendeeLimits {
+            camera_blocked: Some(published("video-1")),
+            ..Default::default()
+        };
+        model.apply(CallUpdate::Roster(vec![video_blocked]));
+        assert!(!model.can_use_camera());
+    }
+
+    #[test]
+    fn a_roster_without_blocked_states_lifts_the_restrictions() {
+        let mut model = restricted_meeting();
+        let mut blocked = attendee("8:orgid:me");
+        blocked.limits = AttendeeLimits {
+            mic_blocked: Some(published("audio-1")),
+            camera_blocked: Some(published("video-1")),
+            ..Default::default()
+        };
+        model.apply(CallUpdate::Roster(vec![blocked]));
+        assert!(!model.can_unmute());
+        assert!(!model.can_use_camera());
+        model.apply(CallUpdate::Roster(vec![attendee("8:orgid:me")]));
+        assert!(model.can_unmute());
+        assert!(model.can_use_camera());
+    }
+
     #[test]
     fn callees_start_invited_and_follow_the_progress() {
         let mut model = CallModel::people("Bea", &[("8:orgid:b".into(), "Bea".into())]);
