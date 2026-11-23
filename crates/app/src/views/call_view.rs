@@ -63,7 +63,9 @@ const COMPACT_PLATE_BELOW: f32 = 200.;
 pub const CHAT_PANEL_TAG: &str = "shell/islands/main/call-chat-panel";
 pub const NO_MICROPHONE_HINT: &str = "No microphone found";
 const AUDIO_OFF_HINT: &str = "Audio is off for this meeting";
+const MIC_RESTRICTED_HINT: &str = "Your mic is turned off by the organizer";
 pub const NO_CAMERA_HINT: &str = "No camera found";
+const CAMERA_RESTRICTED_HINT: &str = "Your camera is turned off by the organizer";
 pub const NO_SHARE_HINT: &str = "Sharing starts once the call is connected";
 pub const NO_WINDOWS_HINT: &str = "No windows found";
 pub(super) const BANNER_HEIGHT: f32 = 40.;
@@ -424,6 +426,8 @@ fn mic_action(button: Stateful<Div>, app: &Entity<AppState>, model: &CallModel) 
     if !model.can_unmute() {
         let hint = if model.audio_off {
             AUDIO_OFF_HINT
+        } else if model.mic_restricted_by_organizer() {
+            MIC_RESTRICTED_HINT
         } else {
             NO_MICROPHONE_HINT
         };
@@ -517,10 +521,15 @@ fn camera_action(
     model: &CallModel,
 ) -> Stateful<Div> {
     if !model.can_use_camera() {
+        let hint = if model.camera_restricted_by_organizer() {
+            CAMERA_RESTRICTED_HINT
+        } else {
+            NO_CAMERA_HINT
+        };
         return button
             .opacity(DISABLED_OPACITY)
             .cursor_default()
-            .tooltip(|window, cx| Tooltip::new(NO_CAMERA_HINT).build(window, cx));
+            .tooltip(move |window, cx| Tooltip::new(hint).build(window, cx));
     }
     let app = app.clone();
     button.on_click(move |_, _, cx| {
