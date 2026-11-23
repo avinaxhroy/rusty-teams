@@ -61,6 +61,7 @@
 
 **Calls**
 - Test call to the Teams Echo bot from the avatar menu: native WebRTC audio, mute (`Ctrl+Shift+M`), device switching, mini window while you read other chats
+- `msteams://` meeting links open the app from anywhere in the OS (scheme registered on Windows, Linux and macOS) and join through the pre-join screen; organizer mic/camera restrictions disable the attendee buttons
 - Phone button in 1:1 and group chat headers: callee tiles show Calling and Ringing, Cancel while ringing, notices like "Bea declined" or "No answer"
 - Video and screen sharing: H264 tiles, shared screen on a stage (double click for full window, Esc back), camera and screen share buttons with a "You are sharing" banner. Linux needs glib at run time. On Wayland, sharing opens the desktop ScreenCast portal dialog, including on KDE, GNOME and Hyprland
 - Incoming calls: topmost ring toast with Decline and Accept, ring tone, missed calls in Activity
