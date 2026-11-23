@@ -207,6 +207,7 @@ pub fn desktop_entry(executable: &Path) -> String {
          StartupWMClass={DESKTOP_ID}\n\
          Terminal=false\n\
          Categories=Network;InstantMessaging;Chat;\n\
+         MimeType=x-scheme-handler/msteams;\n\
          Keywords=Teams;Chat;Microsoft;\n",
         name = crate::APP_NAME,
         exec = exec_quoted(executable),

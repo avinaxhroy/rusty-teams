@@ -71,6 +71,17 @@ cat > "$app/Contents/Info.plist" <<PLIST
     <string>Rusty Teams</string>
     <key>CFBundleIdentifier</key>
     <string>org.rusty-teams.teams</string>
+    <key>CFBundleURLTypes</key>
+    <array>
+        <dict>
+            <key>CFBundleURLName</key>
+            <string>org.rusty-teams.teams</string>
+            <key>CFBundleURLSchemes</key>
+            <array>
+                <string>msteams</string>
+            </array>
+        </dict>
+    </array>
     <key>CFBundleExecutable</key>
     <string>$binary</string>
     <key>CFBundleIconFile</key>
