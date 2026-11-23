@@ -309,6 +309,7 @@ pub struct CallModel {
     pub own_spotlight: Option<u64>,
     pub organizer: bool,
     pub own_role: Option<MeetingRole>,
+    pub own_limits: AttendeeLimits,
     pub capability: MeetingCapability,
     pub pinned: Option<String>,
     pub fitted: HashSet<String>,
@@ -381,6 +382,7 @@ impl CallModel {
             own_spotlight: None,
             organizer: false,
             own_role: None,
+            own_limits: AttendeeLimits::default(),
             capability: MeetingCapability::default(),
             pinned: None,
             fitted: HashSet::new(),
@@ -709,6 +711,30 @@ impl CallModel {
         calling::modality_allowed(modality, self.capability, &limits)
     }
 
+    /// Whether `modality` is allowed for us. Meeting-wide attendee restrictions
+    /// stop at organizers and presenters (like the People panel rows); their
+    /// published per-person blocked states still apply.
+    pub fn modality_allowed_for_me(&self, modality: calling::Modality) -> bool {
+        let attendee = self.own_role != Some(MeetingRole::Organizer)
+            && self.own_role != Some(MeetingRole::Presenter);
+        let capability = if attendee {
+            self.capability
+        } else {
+            MeetingCapability::default()
+        };
+        calling::modality_allowed(modality, capability, &self.own_limits)
+    }
+
+    /// The organizer restricts our mic.
+    pub fn mic_restricted_by_organizer(&self) -> bool {
+        !self.modality_allowed_for_me(calling::Modality::Mic)
+    }
+
+    /// The organizer restricts our camera.
+    pub fn camera_restricted_by_organizer(&self) -> bool {
+        !self.modality_allowed_for_me(calling::Modality::Camera)
+    }
+
     pub fn can_lower_hands(&self) -> bool {
         self.can_manage()
     }
@@ -836,6 +862,9 @@ impl CallModel {
         if let Some(entry) = own_entry {
             self.organizer = entry.organizer;
             self.own_role = entry.role;
+            if entry.limits != self.own_limits {
+                self.own_limits = entry.limits.clone();
+            }
         }
         for entry in entries
             .iter()
@@ -1209,7 +1238,7 @@ impl CallModel {
     }
 
     pub fn can_use_camera(&self) -> bool {
-        !self.cameras.is_empty()
+        !self.cameras.is_empty() && self.modality_allowed_for_me(calling::Modality::Camera)
     }
 
     pub fn can_share(&self) -> bool {
@@ -1249,7 +1278,9 @@ impl CallModel {
     }
 
     pub fn can_unmute(&self) -> bool {
-        !self.listen_only && !self.audio_off
+        !self.listen_only
+            && !self.audio_off
+            && self.modality_allowed_for_me(calling::Modality::Mic)
     }
 }
 
