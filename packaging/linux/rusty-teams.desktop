@@ -11,6 +11,7 @@ Icon=rusty-teams
 StartupWMClass=rusty-teams
 Terminal=false
 Categories=Network;InstantMessaging;Chat;
+MimeType=x-scheme-handler/msteams;
 Keywords=Teams;Chat;Microsoft;
 # AppRun registers the desktop entry and icons itself; tell external AppImage
 # integrators (AppImageLauncher, appimaged) not to add a duplicate.

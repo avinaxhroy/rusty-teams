@@ -111,6 +111,9 @@ fn parse_arguments() -> Arguments {
             app_base::orgs::OPEN_CONVERSATION_FLAG => {
                 arguments.open_target = input.next().map(OpenTarget::Conversation)
             }
+            argument if app_base::protocol::msteams_link(argument).is_some() => {
+                arguments.remote_command = Some(RemoteCommand::Join(argument.to_owned()))
+            }
             "--open-channel" => {
                 arguments.open_target = input
                     .next()
@@ -124,6 +127,20 @@ fn parse_arguments() -> Arguments {
 }
 
 const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(1);
+
+/// Registers the `msteams:` scheme once the platform is up; the result is only logged,
+/// startup never waits on it.
+fn install_protocol(cx: &App) {
+    if let Err(error) = app_base::protocol::register() {
+        log::warn!("msteams scheme registration failed: {error}");
+    }
+    let registered = cx.register_url_scheme("msteams");
+    cx.spawn(async move |_| match registered.await {
+        Ok(()) => log::info!("msteams scheme registered"),
+        Err(error) => log::warn!("msteams scheme registration unavailable: {error}"),
+    })
+    .detach();
+}
 
 fn data_path(name: &str) -> PathBuf {
     ProjectDirs::from("", "", store::DATA_DIR_NAME)
@@ -310,6 +327,16 @@ fn main() {
 
     let startup_zoom = appearance::load(&store).zoom;
     let platform = zoom::wrap(gpui_kit::platform::current_platform(false), startup_zoom);
+    if !arguments.demo {
+        use gpui_kit::platform::Platform as _;
+        platform.on_open_urls(Box::new(|urls| {
+            for url in urls {
+                if let Some(command) = app_base::protocol::msteams_join_command(&url) {
+                    single_instance::queue_command(&command);
+                }
+            }
+        }));
+    }
     let mut application = Application::with_platform(platform);
     if let Ok(http_client) = reqwest_client::ReqwestClient::user_agent(HTTP_USER_AGENT) {
         application = application.with_http_client(Arc::new(http_client));
@@ -329,6 +356,9 @@ fn main() {
             active_locale::install(&store, cx);
             theme::apply(cx);
             bind_keys(cx);
+            if !arguments.demo {
+                install_protocol(cx);
+            }
             let state = cx.new(|_| {
                 let mut state = AppState::new(store, mode);
                 state.start_on_channels = arguments.channels_tab;
