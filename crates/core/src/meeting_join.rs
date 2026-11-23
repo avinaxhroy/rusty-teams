@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::sync::LazyLock;
 
 use percent_encoding::percent_decode_str;
@@ -18,6 +19,7 @@ const MEET_SEGMENT: &str = "meet";
 const THREAD_PREFIX: &str = "19:";
 const PASSCODE_KEY: &str = "p";
 const CONTEXT_KEY: &str = "context";
+const MSTEAMS_SCHEME: &str = "msteams:";
 
 static URL_PATTERN: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r#"https://[^\s<>"'\])]+"#).expect("url pattern"));
@@ -90,8 +92,18 @@ fn meeting_code(url: &Url, segments: &[&str]) -> Option<MeetingCode> {
     })
 }
 
+/// `msteams://host/path` is the OS protocol form of an `https://host/path` Teams link.
+fn with_https_scheme(text: &str) -> Cow<'_, str> {
+    match text.get(..MSTEAMS_SCHEME.len()) {
+        Some(prefix) if prefix.eq_ignore_ascii_case(MSTEAMS_SCHEME) => {
+            Cow::Owned(format!("https:{}", &text[MSTEAMS_SCHEME.len()..]))
+        }
+        _ => Cow::Borrowed(text),
+    }
+}
+
 pub fn parse_meeting_link(text: &str) -> Option<MeetingLink> {
-    let url = Url::parse(text.trim()).ok()?;
+    let url = Url::parse(&with_https_scheme(text.trim())).ok()?;
     if url.scheme() != "https" || !MEETING_HOSTS.contains(&url.host_str()?) {
         return None;
     }
