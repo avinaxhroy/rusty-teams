@@ -30,6 +30,7 @@ pub mod native_dumps;
 pub mod notify;
 pub mod orgs;
 pub mod presence_link;
+pub mod protocol;
 pub mod read_state;
 pub mod recap;
 pub mod regional;
