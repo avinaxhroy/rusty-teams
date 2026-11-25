@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::sync::LazyLock;
 
 use percent_encoding::percent_decode_str;
@@ -18,6 +19,7 @@ const MEET_SEGMENT: &str = "meet";
 const THREAD_PREFIX: &str = "19:";
 const PASSCODE_KEY: &str = "p";
 const CONTEXT_KEY: &str = "context";
+const MSTEAMS_SCHEME: &str = "msteams:";
 
 static URL_PATTERN: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r#"https://[^\s<>"'\])]+"#).expect("url pattern"));
@@ -90,8 +92,18 @@ fn meeting_code(url: &Url, segments: &[&str]) -> Option<MeetingCode> {
     })
 }
 
+/// `msteams://host/path` is the OS protocol form of an `https://host/path` Teams link.
+fn with_https_scheme(text: &str) -> Cow<'_, str> {
+    match text.get(..MSTEAMS_SCHEME.len()) {
+        Some(prefix) if prefix.eq_ignore_ascii_case(MSTEAMS_SCHEME) => {
+            Cow::Owned(format!("https:{}", &text[MSTEAMS_SCHEME.len()..]))
+        }
+        _ => Cow::Borrowed(text),
+    }
+}
+
 pub fn parse_meeting_link(text: &str) -> Option<MeetingLink> {
-    let url = Url::parse(text.trim()).ok()?;
+    let url = Url::parse(&with_https_scheme(text.trim())).ok()?;
     if url.scheme() != "https" || !MEETING_HOSTS.contains(&url.host_str()?) {
         return None;
     }
@@ -173,6 +185,43 @@ mod tests {
     #[test]
     fn a_meetup_join_link_gives_thread_tenant_and_organizer() {
         let meeting = thread(parse_meeting_link(JOIN_LINK));
+        assert_eq!(meeting.thread_id, THREAD);
+        assert_eq!(meeting.tenant_id, "tenant-1");
+        assert_eq!(meeting.organizer_id, "organizer-1");
+    }
+
+    #[test]
+    fn an_msteams_meetup_join_link_parses_like_its_https_twin() {
+        let msteams = JOIN_LINK.replace("https://", "msteams://");
+        let meeting = thread(parse_meeting_link(&msteams));
+        assert_eq!(meeting.thread_id, THREAD);
+        assert_eq!(meeting.tenant_id, "tenant-1");
+        assert_eq!(meeting.organizer_id, "organizer-1");
+        assert_eq!(meeting, thread(parse_meeting_link(JOIN_LINK)));
+    }
+
+    #[test]
+    fn an_msteams_meet_link_parses_to_the_code_with_passcode() {
+        let link = parse_meeting_link("msteams://teams.microsoft.com/meet/123456789012?p=AbC12xyz");
+        let Some(MeetingLink::Code(code)) = link else {
+            panic!("not a code link");
+        };
+        assert_eq!(code.code, "123456789012");
+        assert_eq!(code.passcode.as_deref(), Some("AbC12xyz"));
+    }
+
+    #[test]
+    fn an_msteams_link_on_a_foreign_host_is_no_meeting_link() {
+        assert_eq!(parse_meeting_link("msteams://example.com/x"), None);
+        assert_eq!(parse_meeting_link("msteams://example.com/meet/123456789012"), None);
+    }
+
+    #[test]
+    fn an_uppercase_msteams_scheme_and_mixed_case_host_still_parse() {
+        let msteams = JOIN_LINK
+            .replace("https://", "MSTEAMS://")
+            .replace("teams.microsoft.com", "Teams.Microsoft.com");
+        let meeting = thread(parse_meeting_link(&msteams));
         assert_eq!(meeting.thread_id, THREAD);
         assert_eq!(meeting.tenant_id, "tenant-1");
         assert_eq!(meeting.organizer_id, "organizer-1");
